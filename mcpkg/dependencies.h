@@ -18,12 +18,13 @@ namespace mcpkg{
         kDepend
     };
 
-    using CompatibleResult = Result<std::tuple<Package>>;
+    using CompatibleResult = Result<Package*>;
 
     class Dependencies {
     public:
         DependenciesType type;
         virtual CompatibleResult compatible(const std::vector<Package>&) = 0;
+        CompatibleResult lastResult;
     };
 
     class PackageDependencies : public Dependencies{
