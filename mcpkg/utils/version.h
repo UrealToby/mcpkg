@@ -47,6 +47,7 @@ class VersionExpressionSection : public VersionExpression{
 class VersionExpressionOr : public VersionExpression{
     std::vector<VersionExpression> expressions;
 
+    // todo: 判断是否满足
     Result<> compatible(Version) override;
 };
 

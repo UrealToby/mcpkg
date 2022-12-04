@@ -6,9 +6,9 @@
 #define MCPKG_DEPENDENCIES_H
 
 #include <string>
-#include "result.h"
+#include "utils/result.h"
 #include "package.h"
-#include "version.h"
+#include "utils/version.h"
 
 namespace mcpkg{
     class Package;

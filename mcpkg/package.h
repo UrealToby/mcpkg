@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "dependencies.h"
-#include "version.h"
-#include "result.h"
+#include "utils/version.h"
+#include "utils/result.h"
 namespace mcpkg{
     class Dependencies;
 
