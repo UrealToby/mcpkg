@@ -18,10 +18,12 @@ namespace mcpkg{
         kDepend
     };
 
+    using CompatibleResult = Result<std::tuple<Package>>;
+
     class Dependencies {
     public:
         DependenciesType type;
-        virtual Result<> compatible(const std::vector<Package>&) = 0;
+        virtual CompatibleResult compatible(const std::vector<Package>&) = 0;
     };
 
     class PackageDependencies : public Dependencies{
@@ -30,6 +32,9 @@ namespace mcpkg{
         /// Examples:
         ///     "mod::forge::jei" "mod_loader::forge" "minecraft"
         std::string packageId;
+
+        /// 判断规则：是冲突还是依赖
+        bool conflict = false;
 
         /// Examples:
         ///     等于: \c "1.19.2"
@@ -40,7 +45,14 @@ namespace mcpkg{
         ///     或: \c "1.5|1.19"
         ///
         VersionExpression* version;
-        Result<> compatible(const std::vector<Package>&) override;
+        CompatibleResult compatible(const std::vector<Package>&) override;
+    };
+
+    class TagConflictDependencies : public Dependencies{
+    public:
+        std::string tag;
+
+        CompatibleResult compatible(const std::vector<Package>&) override;
     };
 
 }

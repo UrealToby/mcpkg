@@ -9,8 +9,8 @@
 template <class RETURN_T=std::string>
 class Result{
 public:
-    RETURN_T data{};
     enum {OK,ERR} state;
+    RETURN_T data{};
     int errCode = 0;
 
     explicit operator bool(){

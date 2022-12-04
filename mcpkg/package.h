@@ -21,6 +21,8 @@ namespace mcpkg{
         std::string describe;
         std::vector<Dependencies*> dependencies;
 
+        std::vector<std::string > tags;
+
         Version version;
 
         Result<Dependencies*> checkDependencies(const std::vector<Package>&);
