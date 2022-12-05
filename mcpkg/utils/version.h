@@ -13,7 +13,6 @@
 class Version {
 public:
     std::vector<std::string> data;
-
 };
 
 
@@ -30,7 +29,7 @@ class VersionExpressionGreaterOrLess : public VersionExpression{
     /// 大于还是小于
     bool greater{};
     /// 是否为开区间
-    bool close{};
+    bool close = true;
 
     // todo: 判断是否满足
     Result<> compatible(Version) override;
