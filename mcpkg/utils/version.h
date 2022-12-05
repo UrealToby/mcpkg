@@ -14,7 +14,7 @@ class Version {
 public:
     std::vector<std::string> data;
 
-    inline int size() const;
+    [[nodiscard]] inline int size() const;
 
     static Result<> comparison(Version left, Version right, bool greater, bool close);
     inline bool operator ==(const Version& version) const;
@@ -55,6 +55,7 @@ public:
     std::vector<VersionExpression*> expressions;
 
     Result<> compatible(const Version&) override;
+    ~VersionExpressionOr();
 };
 
 

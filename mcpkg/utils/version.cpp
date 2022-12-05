@@ -62,7 +62,7 @@ int Version::size() const {
 }
 
 
-Result<> VersionExpressionGreaterOrLess::compatible(const Version& version) {
+Result<> VersionExpressionGreaterOrLess::compatible(const Version &version) {
     return Version::comparison(base, version, greater, close);
 }
 
@@ -82,7 +82,7 @@ VersionExpression *ParseTree(SyntaxTreeNode root) {
     if (root.type == SyntaxTreeNode::nodeRoot or root.type == SyntaxTreeNode::nodeOrItem) {
         if (root.child[0].type == SyntaxTreeNode::nodeV) {
             auto *expression = new VersionExpression();
-            for (const auto& child: root.child) {
+            for (const auto &child: root.child) {
                 expression->base.data.push_back(ParseTree(child)->base.data[0]);
             }
             return expression;
@@ -93,7 +93,7 @@ VersionExpression *ParseTree(SyntaxTreeNode root) {
         expression->base.data.push_back(root.data);
     } else if (root.type == SyntaxTreeNode::nodeOr) {
         auto expression = new VersionExpressionOr();
-        for (const auto& node: root.child) {
+        for (const auto &node: root.child) {
             expression->expressions.push_back(ParseTree(node));
         }
     } else if (root.type == SyntaxTreeNode::nodeMinimum) {
@@ -122,83 +122,122 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
 
     /// 构建语法树
     for (auto c: str) {
-        if (c == '^') {
-            if (head->parent->type == SyntaxTreeNode::nodeMinimum or
-                head->parent->type == SyntaxTreeNode::nodeGreater) {
-                auto sec = new SyntaxTreeNode{SyntaxTreeNode::nodeSection, head->parent->parent};
-                head->parent = sec;
-                head = sec;
-            }
+        switch (c) {
+            case '^': {
+                if (head->parent->type == SyntaxTreeNode::nodeMinimum or
+                    head->parent->type == SyntaxTreeNode::nodeGreater) {
+                    auto sec = new SyntaxTreeNode{SyntaxTreeNode::nodeSection, head->parent->parent};
+                    head->parent = sec;
+                    head = sec;
+                }
 
-            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeMinimum, head};
-            head->child.push_back(*node);
-            head = node;
-        } else if (c == '>') {
-            if (head->parent->type == SyntaxTreeNode::nodeMinimum or
-                head->parent->type == SyntaxTreeNode::nodeGreater) {
-                auto sec = new SyntaxTreeNode{SyntaxTreeNode::nodeSection, head->parent->parent};
-                head->parent = sec;
-                head = sec;
-            }
-
-            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeGreater, head};
-            head->child.push_back(*node);
-            head = node;
-        } else if (c == '<') {
-            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, head};
-            head->child.push_back(*node);
-            head = node;
-        } else if (c == '=') {
-            if (head->parent->type == SyntaxTreeNode::nodeGreater) {
-                head->parent->type = SyntaxTreeNode::nodeMinimum;
-            } else if (head->parent->type == SyntaxTreeNode::nodeLess) {
-                head->parent->type = SyntaxTreeNode::nodeMaximum;
-            }
-        } else if (c == '[') {
-            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOr, head};
-            head->child.push_back(*node);
-            head = node;
-            node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
-            head->child.push_back(*node);
-            head = node;
-        } else if (c == '|') {
-            head = head->parent;
-            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
-            head->child.push_back(*node);
-            head = node;
-        } else if (c == ']') {
-            head = head->parent->parent;
-        } else if (c == '.') {
-            head = head->parent;
-        } else {
-            if (head->type != SyntaxTreeNode::nodeV) {
-                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeV, head};
+                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeMinimum, head};
                 head->child.push_back(*node);
-                node->data += c;
+                head = node;
+                break;
+            }
+            case '>': {
+                if (head->parent->type == SyntaxTreeNode::nodeMinimum or
+                    head->parent->type == SyntaxTreeNode::nodeGreater) {
+                    auto sec = new SyntaxTreeNode{SyntaxTreeNode::nodeSection, head->parent->parent};
+                    head->parent = sec;
+                    head = sec;
+                }
+
+                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeGreater, head};
+                head->child.push_back(*node);
+                head = node;
+
+                break;
+            }
+            case '<': {
+                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, head};
+                head->child.push_back(*node);
+                head = node;
+                break;
+            }
+            case '=': {
+                if (head->parent->type == SyntaxTreeNode::nodeGreater) {
+                    head->parent->type = SyntaxTreeNode::nodeMinimum;
+                } else if (head->parent->type == SyntaxTreeNode::nodeLess) {
+                    head->parent->type = SyntaxTreeNode::nodeMaximum;
+                }
+                break;
+            }
+            case '[': {
+                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOr, head};
+                head->child.push_back(*node);
+                head = node;
+                node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
+                head->child.push_back(*node);
+                head = node;
+            }
+            case '|': {
+                head = head->parent;
+                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
+                head->child.push_back(*node);
+                head = node;
+                break;
+            }
+            case ']': {
+                head = head->parent->parent;
+                break;
+            }
+            case '.': {
+                head = head->parent;
+                break;
+            }
+            default: {
+                if (head->type != SyntaxTreeNode::nodeV) {
+                    auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeV, head};
+                    head->child.push_back(*node);
+                    node->data += c;
+                }
             }
         }
     }
 
-    return nullptr;
+    return ParseTree(root);
 }
 
 
-Result<> VersionExpression::compatible(const Version& version) {
-    return base == version ? Result<>::Ok() : Result<>::Err(1);
+Result<> VersionExpression::compatible(const Version &version) {
+    if (base == version) {
+        return Result<>::Ok();
+    }
+    int len = base.size();
+    if (len != version.size()) {
+        return Result<>::Err(1, "inconsistent version");
+    }
+    for (int i = 0; i < len; ++i) {
+        if (base.data[i] == "*") {
+            continue;
+        }
+        if (base.data[i] != version.data[i]) {
+            return Result<>::Err(1, "inconsistent version");
+        }
+    }
+    return Result<>::Ok();
 }
 
-Result<> VersionExpressionRange::compatible(const Version & version) {
+Result<> VersionExpressionRange::compatible(const Version &version) {
     auto lResult = left.compatible(version);
     auto rResult = right.compatible(version);
 
-    return lResult and rResult?Result<>::Ok() : Result<>::Err(1,"version is not in the specified range");
+    return lResult and rResult ? Result<>::Ok() : Result<>::Err(1, "version is not in the specified range");
 }
 
-Result<> VersionExpressionOr::compatible(const Version & version) {
-    for (auto expr:expressions) {
-        if(expr->compatible(version)){
+Result<> VersionExpressionOr::compatible(const Version &version) {
+    for (auto expr: expressions) {
+        if (expr->compatible(version)) {
             return Result<>::Ok();
         }
     }
-    return Result<>::Err(1,"The version cannot meet any conditions");
+    return Result<>::Err(1, "The version cannot meet any conditions");
+}
+
+VersionExpressionOr::~VersionExpressionOr() {
+    for (auto a:expressions) {
+        delete a;
+    }
 }
