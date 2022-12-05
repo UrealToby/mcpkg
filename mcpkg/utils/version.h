@@ -15,6 +15,8 @@ public:
     std::vector<std::string> data;
 
     [[nodiscard]] inline int size() const;
+    Version()= default;
+    explicit Version(std::string);
 
     static Result<> comparison(Version left, Version right, bool greater, bool close);
     inline bool operator ==(const Version& version) const;
@@ -36,7 +38,7 @@ public:
 class VersionExpressionGreaterOrLess : public VersionExpression{
 public:
     /// 大于还是小于
-    bool greater{};
+    bool greater = true;
     /// 是否为开区间
     bool close = true;
 
@@ -44,9 +46,11 @@ public:
 };
 
 class VersionExpressionRange : public VersionExpression{
-    VersionExpressionGreaterOrLess left;
-    VersionExpressionGreaterOrLess right;
+public:
+    VersionExpressionGreaterOrLess* left;
+    VersionExpressionGreaterOrLess* right;
 
+    ~VersionExpressionRange();
     Result<> compatible(const Version&) override;
 };
 

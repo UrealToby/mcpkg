@@ -6,7 +6,7 @@
 #define MCPKG_RESULT_H
 #include <string>
 
-template <class RETURN_T=const char*>
+template <class RETURN_T=std::string>
 class Result{
 public:
     enum {OK,ERR} state;
