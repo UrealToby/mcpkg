@@ -27,37 +27,36 @@ public:
 
 class VersionExpression{
 public:
-    std::string expression;
     Version base;
-    // todo: 将 string 转为 版本表达式
+
     static VersionExpression* from_string(const std::string&);
-    virtual Result<> compatible(Version);
+    virtual Result<> compatible(const Version&);
 };
 
 class VersionExpressionGreaterOrLess : public VersionExpression{
+public:
     /// 大于还是小于
     bool greater{};
     /// 是否为开区间
     bool close = true;
 
-    // todo: 判断是否满足
-    Result<> compatible(Version) override;
+    Result<> compatible(const Version&) override;
 };
 
-class VersionExpressionSection : public VersionExpression{
+class VersionExpressionRange : public VersionExpression{
     VersionExpressionGreaterOrLess left;
     VersionExpressionGreaterOrLess right;
 
-    // todo: 判断是否满足
-    Result<> compatible(Version) override;
+    Result<> compatible(const Version&) override;
 };
 
 class VersionExpressionOr : public VersionExpression{
-    std::vector<VersionExpression> expressions;
+public:
+    std::vector<VersionExpression*> expressions;
 
-    // todo: 判断是否满足
-    Result<> compatible(Version) override;
+    Result<> compatible(const Version&) override;
 };
+
 
 
 #endif //MCPKG_VERSION_H

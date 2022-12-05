@@ -2,6 +2,6 @@
 
 int main()
 {
-    std::cout<<std::stoi("f1")<<std::endl;
+    std::cout<<"hello world!"<<std::endl;
     return 0;
 }

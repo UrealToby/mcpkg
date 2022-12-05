@@ -13,136 +13,192 @@
 /// \param close
 /// \return
 Result<> Version::comparison(Version left, Version right, bool greater, bool close) {
-    int maxLen = std::max(left.size(),right.size());
+    int maxLen = std::max(left.size(), right.size());
     for (int i = 0; i < maxLen; ++i) {
-        if (left.data[i] == right.data[i]){
+        if (left.data[i] == right.data[i]) {
             continue;
-        }else{
+        } else {
             int base_section;
             int version_section;
-            try{
+            try {
                 base_section = std::stoi(left.data[i]);
                 version_section = std::stoi(right.data[i]);
             }
-            catch (std::invalid_argument& e){
-                return Result<>::Err(2,"cannot compare sizes between strings");
+            catch (std::invalid_argument &e) {
+                return Result<>::Err(2, "cannot compare sizes between strings");
             }
-            if ((base_section > version_section) == greater){
+            if ((base_section > version_section) == greater) {
                 return Result<>::Ok();
-            }else {
-                return Result<>::Err(1,"unsatisfactory relationship");
+            } else {
+                return Result<>::Err(1, "unsatisfactory relationship");
             }
         }
     }
-    return close ? Result<>::Ok() : Result<>::Err(1,"unsatisfactory relationship");
+    return close ? Result<>::Ok() : Result<>::Err(1, "unsatisfactory relationship");
 }
 
-bool Version::operator==(const Version& version) const {
+bool Version::operator==(const Version &version) const {
     return version.data == data;
 }
 
 bool Version::operator>=(const Version &version) const {
-    return (bool)comparison(*this,version,true, true);
+    return (bool) comparison(*this, version, true, true);
 }
 
 bool Version::operator<=(const Version &version) const {
-    return (bool)comparison(*this,version, false, true);
+    return (bool) comparison(*this, version, false, true);
 }
 
 bool Version::operator>(const Version &version) const {
-    return (bool)comparison(*this,version,true, false);
+    return (bool) comparison(*this, version, true, false);
 }
 
 bool Version::operator<(const Version &version) const {
-    return (bool)comparison(*this,version, false, false);
+    return (bool) comparison(*this, version, false, false);
 }
 
 int Version::size() const {
-    return (int)data.size();
+    return (int) data.size();
 }
 
 
-Result<> VersionExpressionGreaterOrLess::compatible(Version version) {
-    return Version::comparison(base,version,greater,close);
+Result<> VersionExpressionGreaterOrLess::compatible(const Version& version) {
+    return Version::comparison(base, version, greater, close);
 }
 
-class ParseTreeNode{
+class SyntaxTreeNode {
 public:
-    enum {nodeRoot,nodeOr,nodeOrItem,nodeMinimum,nodeMaximum,nodeGreater,nodeLess,nodeSection,nodeV}type;
-    ParseTreeNode * parent;
-    std::vector<ParseTreeNode> child;
+    enum {
+        nodeRoot, nodeOr, nodeOrItem, nodeMinimum, nodeMaximum, nodeGreater, nodeLess, nodeSection, nodeV
+    } type;
+    SyntaxTreeNode *parent;
+    std::vector<SyntaxTreeNode> child;
     std::string data;
 };
 
-VersionExpression *VersionExpression::from_string(const std::string& str) {
-    ParseTreeNode root = ParseTreeNode{ParseTreeNode::nodeRoot, nullptr};
-    ParseTreeNode* head=&root;
+VersionExpression *ParseTree(SyntaxTreeNode root) {
+
+//    VersionExpression* expression;
+    if (root.type == SyntaxTreeNode::nodeRoot or root.type == SyntaxTreeNode::nodeOrItem) {
+        if (root.child[0].type == SyntaxTreeNode::nodeV) {
+            auto *expression = new VersionExpression();
+            for (const auto& child: root.child) {
+                expression->base.data.push_back(ParseTree(child)->base.data[0]);
+            }
+            return expression;
+        }
+        return ParseTree(root);
+    } else if (root.type == SyntaxTreeNode::nodeV) {
+        auto expression = new VersionExpression();
+        expression->base.data.push_back(root.data);
+    } else if (root.type == SyntaxTreeNode::nodeOr) {
+        auto expression = new VersionExpressionOr();
+        for (const auto& node: root.child) {
+            expression->expressions.push_back(ParseTree(node));
+        }
+    } else if (root.type == SyntaxTreeNode::nodeMinimum) {
+        return new VersionExpressionGreaterOrLess();
+    } else if (root.type == SyntaxTreeNode::nodeGreater) {
+        auto expression = new VersionExpressionGreaterOrLess();
+        expression->close = false;
+        return expression;
+    } else if (root.type == SyntaxTreeNode::nodeMaximum) {
+        auto expression = new VersionExpressionGreaterOrLess();
+        expression->greater = false;
+        return expression;
+    } else if (root.type == SyntaxTreeNode::nodeLess) {
+        auto expression = new VersionExpressionGreaterOrLess();
+        expression->greater = false;
+        expression->close = false;
+        return expression;
+    }
+    return nullptr;
+}
+
+
+VersionExpression *VersionExpression::from_string(const std::string &str) {
+    SyntaxTreeNode root = SyntaxTreeNode{SyntaxTreeNode::nodeRoot, nullptr};
+    SyntaxTreeNode *head = &root;
 
     /// 构建语法树
     for (auto c: str) {
-        if (c == '^' ){
-            if (head->parent->type == ParseTreeNode::nodeMinimum or head->parent->type == ParseTreeNode::nodeGreater){
-                auto sec = new ParseTreeNode{ParseTreeNode::nodeSection,head->parent->parent};
+        if (c == '^') {
+            if (head->parent->type == SyntaxTreeNode::nodeMinimum or
+                head->parent->type == SyntaxTreeNode::nodeGreater) {
+                auto sec = new SyntaxTreeNode{SyntaxTreeNode::nodeSection, head->parent->parent};
                 head->parent = sec;
                 head = sec;
             }
 
-            auto node = new ParseTreeNode{ParseTreeNode::nodeMinimum,head};
+            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeMinimum, head};
             head->child.push_back(*node);
             head = node;
-        }else if (c=='>'){
-            if (head->parent->type == ParseTreeNode::nodeMinimum or head->parent->type == ParseTreeNode::nodeGreater){
-                auto sec = new ParseTreeNode{ParseTreeNode::nodeSection,head->parent->parent};
+        } else if (c == '>') {
+            if (head->parent->type == SyntaxTreeNode::nodeMinimum or
+                head->parent->type == SyntaxTreeNode::nodeGreater) {
+                auto sec = new SyntaxTreeNode{SyntaxTreeNode::nodeSection, head->parent->parent};
                 head->parent = sec;
                 head = sec;
             }
 
-            auto node = new ParseTreeNode{ParseTreeNode::nodeGreater,head};
+            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeGreater, head};
             head->child.push_back(*node);
             head = node;
-        }
-        else if (c=='<'){
-            auto node = new ParseTreeNode{ParseTreeNode::nodeLess,head};
+        } else if (c == '<') {
+            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, head};
             head->child.push_back(*node);
             head = node;
-        }
-        else if (c=='='){
-            if (head->parent->type == ParseTreeNode::nodeGreater){
-                head->parent->type = ParseTreeNode::nodeMinimum;
-            }else if (head->parent->type == ParseTreeNode::nodeLess){
-                head->parent->type = ParseTreeNode::nodeMaximum;
+        } else if (c == '=') {
+            if (head->parent->type == SyntaxTreeNode::nodeGreater) {
+                head->parent->type = SyntaxTreeNode::nodeMinimum;
+            } else if (head->parent->type == SyntaxTreeNode::nodeLess) {
+                head->parent->type = SyntaxTreeNode::nodeMaximum;
             }
-        }
-        else if (c=='['){
-            auto node = new ParseTreeNode{ParseTreeNode::nodeOr,head};
+        } else if (c == '[') {
+            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOr, head};
             head->child.push_back(*node);
             head = node;
-            node = new ParseTreeNode{ParseTreeNode::nodeOrItem,head};
+            node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
             head->child.push_back(*node);
             head = node;
-        }
-        else if (c=='|'){
+        } else if (c == '|') {
             head = head->parent;
-            auto node = new ParseTreeNode{ParseTreeNode::nodeOrItem,head};
+            auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
             head->child.push_back(*node);
             head = node;
-        } else if (c==']'){
+        } else if (c == ']') {
             head = head->parent->parent;
-        }
-        else if (c=='.'){
+        } else if (c == '.') {
             head = head->parent;
-        }
-        else{
-            if (head->type != ParseTreeNode::nodeV){
-                auto node = new ParseTreeNode{ParseTreeNode::nodeV,head};
+        } else {
+            if (head->type != SyntaxTreeNode::nodeV) {
+                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeV, head};
                 head->child.push_back(*node);
                 node->data += c;
             }
         }
     }
+
     return nullptr;
 }
 
-Result<> VersionExpression::compatible(Version version) {
-    return base == version? Result<>::Ok() : Result<>::Err(1);
+
+Result<> VersionExpression::compatible(const Version& version) {
+    return base == version ? Result<>::Ok() : Result<>::Err(1);
+}
+
+Result<> VersionExpressionRange::compatible(const Version & version) {
+    auto lResult = left.compatible(version);
+    auto rResult = right.compatible(version);
+
+    return lResult and rResult?Result<>::Ok() : Result<>::Err(1,"version is not in the specified range");
+}
+
+Result<> VersionExpressionOr::compatible(const Version & version) {
+    for (auto expr:expressions) {
+        if(expr->compatible(version)){
+            return Result<>::Ok();
+        }
+    }
+    return Result<>::Err(1,"The version cannot meet any conditions");
 }
