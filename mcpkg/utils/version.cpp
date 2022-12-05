@@ -87,74 +87,113 @@ Result<> VersionExpressionGreaterOrLess::compatible(const Version &version) {
 class SyntaxTreeNode {
 public:
     enum {
-        nodeRoot, nodeOr, nodeOrItem, nodeMinimum, nodeMaximum, nodeGreater, nodeLess, nodeRange, nodeV
+        nodeRoot, nodeOr, nodeMinimum, nodeMaximum, nodeGreater, nodeLess, nodeRange, nodeRaw
     } type;
     SyntaxTreeNode *parent;
-    std::vector<SyntaxTreeNode *> child;
+    void *value;
     std::string data;
 
+    [[nodiscard]] SyntaxTreeNode *valueSyntaxTreeNode() const {
+        return static_cast <SyntaxTreeNode *>(value);
+    }
+
+    [[nodiscard]] std::vector<SyntaxTreeNode *> *valueSyntaxTreeNodeList() const {
+        return static_cast <std::vector<SyntaxTreeNode *> *>(value);
+    }
+
+    [[nodiscard]] std::vector<std::string> *valueSyntaxStringList() const {
+        return static_cast <std::vector<std::string> *>(value);
+    }
+
+    [[nodiscard]] std::pair<SyntaxTreeNode *, SyntaxTreeNode *> *valuePair() const {
+        return static_cast <std::pair<SyntaxTreeNode *, SyntaxTreeNode *> *>(value);
+    }
+
     ~SyntaxTreeNode() {
-        for (auto c: child) {
-            delete c;
+        switch (type) {
+            case nodeRoot: {
+                auto child = valueSyntaxTreeNode();
+                delete child;
+                break;
+            }
+            case nodeOr: {
+                auto childList = valueSyntaxTreeNodeList();
+                for (auto child: *childList) {
+                    delete child;
+                }
+                delete childList;
+                break;
+            }
+            case nodeRange: {
+                auto rangeTuple = valuePair();
+                delete rangeTuple->first;
+                delete rangeTuple->second;
+            }
+
+            default: {
+                auto childList = static_cast <std::vector<std::string *> *>(value);
+                for (auto child: *childList) {
+                    delete child;
+                }
+                delete childList;
+            }
         }
     }
 };
 
-VersionExpression *ParseTree(SyntaxTreeNode *root) {
+VersionExpression *ParseTree(SyntaxTreeNode *node) {
 //    VersionExpression* expression;
-    if (root->type == SyntaxTreeNode::nodeRoot or root->type == SyntaxTreeNode::nodeOrItem) {
-        if (root->child[0]->type == SyntaxTreeNode::nodeV) {
-            auto *expression = new VersionExpression();
-            for (auto child: root->child) {
-                expression->base.data.push_back(ParseTree(child)->base.data[0]);
+    switch (node->type) {
+        case SyntaxTreeNode::nodeRoot:
+            return ParseTree(node->valueSyntaxTreeNode());
+        case SyntaxTreeNode::nodeRange: {
+            auto expression = new VersionExpressionRange();
+            expression->left = dynamic_cast<VersionExpressionGreaterOrLess *>(ParseTree(node->valuePair()->first));
+            expression->right = dynamic_cast<VersionExpressionGreaterOrLess *>(ParseTree(node->valuePair()->second));
+
+            return expression;
+        }
+        case SyntaxTreeNode::nodeOr: {
+            auto expression = new VersionExpressionOr();
+            for (auto child: *node->valueSyntaxTreeNodeList()) {
+                expression->expressions.push_back(ParseTree(child));
             }
             return expression;
         }
-        return ParseTree(root->child[0]);
-    } else if (root->type == SyntaxTreeNode::nodeRange) {
-        auto expression = new VersionExpressionRange();
-        expression->left = dynamic_cast<VersionExpressionGreaterOrLess *>(ParseTree(root->child[0]));
-        expression->right = dynamic_cast<VersionExpressionGreaterOrLess *>(ParseTree(root->child[1]));
-        return expression;
-    } else if (root->type == SyntaxTreeNode::nodeV) {
-        auto expression = new VersionExpression();
-        expression->base.data.push_back(root->data);
-        return expression;
-    } else if (root->type == SyntaxTreeNode::nodeOr) {
-        auto expression = new VersionExpressionOr();
-        for (auto node: root->child) {
-            expression->expressions.push_back(ParseTree(node));
+        case SyntaxTreeNode::nodeMinimum: {
+            auto expression = new VersionExpressionGreaterOrLess();
+
+            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            return expression;
         }
-        return expression;
-    } else if (root->type == SyntaxTreeNode::nodeMinimum) {
-        auto expression = new VersionExpressionGreaterOrLess();
-        for (const auto &node: root->child) {
-            expression->base.data.push_back(ParseTree(node)->base.data[0]);
+        case SyntaxTreeNode::nodeMaximum: {
+            auto expression = new VersionExpressionGreaterOrLess();
+            expression->greater = false;
+
+            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            return expression;
         }
-        return expression;
-    } else if (root->type == SyntaxTreeNode::nodeGreater) {
-        auto expression = new VersionExpressionGreaterOrLess();
-        expression->close = false;
-        for (const auto &node: root->child) {
-            expression->base.data.push_back(ParseTree(node)->base.data[0]);
+        case SyntaxTreeNode::nodeGreater: {
+            auto expression = new VersionExpressionGreaterOrLess();
+            expression->close = false;
+
+            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            return expression;
         }
-        return expression;
-    } else if (root->type == SyntaxTreeNode::nodeMaximum) {
-        auto expression = new VersionExpressionGreaterOrLess();
-        expression->greater = false;
-        for (const auto &node: root->child) {
-            expression->base.data.push_back(ParseTree(node)->base.data[0]);
+        case SyntaxTreeNode::nodeLess: {
+            auto expression = new VersionExpressionGreaterOrLess();
+            expression->greater = false;
+            expression->close = false;
+
+            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            return expression;
         }
-        return expression;
-    } else if (root->type == SyntaxTreeNode::nodeLess) {
-        auto expression = new VersionExpressionGreaterOrLess();
-        expression->greater = false;
-        expression->close = false;
-        for (const auto &node: root->child) {
-            expression->base.data.push_back(ParseTree(node)->base.data[0]);
-        }
-        return expression;
+        case SyntaxTreeNode::nodeRaw:
+            auto expression = new VersionExpression();
+            expression->base.data = *node->valueSyntaxStringList();
+            break;
     }
+
     return nullptr;
 }
 
@@ -168,28 +207,61 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
         switch (c) {
             case '^': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeMinimum, head};
-                head->child.push_back(node);
+                node->value = new std::vector<std::string>;
+
+                if (head->type == SyntaxTreeNode::nodeOr) {
+                    head->valueSyntaxTreeNodeList()->push_back(node);
+                } else {
+                    head->value = node;
+                }
+
                 head = node;
                 break;
             }
             case '>': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeGreater, head};
-                head->child.push_back(node);
-                head = node;
+                node->value = new std::vector<std::string>;
 
+                if (head->type == SyntaxTreeNode::nodeOr) {
+                    head->valueSyntaxTreeNodeList()->push_back(node);
+                } else {
+                    head->value = node;
+                }
+                head = node;
                 break;
             }
             case '<': {
-                if (head->parent->type == SyntaxTreeNode::nodeMinimum or
-                    head->parent->type == SyntaxTreeNode::nodeGreater) {
+                if (head->type != SyntaxTreeNode::nodeRoot and (head->parent->type == SyntaxTreeNode::nodeGreater or
+                                                                head->parent->type == SyntaxTreeNode::nodeMinimum)) {
+                    // 为范围表达式
+                    auto left = head->parent->parent->valueSyntaxTreeNode();
+
+                    auto right = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, head};
+                    right->value = new std::vector<std::string>();
+
+                    auto pair = new std::pair<SyntaxTreeNode *, SyntaxTreeNode *>;
+
+                    // 将节点转为 range 类型
                     auto range = new SyntaxTreeNode{SyntaxTreeNode::nodeRange, head->parent->parent};
-                    auto left = *head->parent->parent->child.rbegin();
-                    *head->parent->parent->child.rbegin() = range;
-                    range->child.push_back(left);
+                    if (head->type == SyntaxTreeNode::nodeOr) {
+                        *head->parent->parent->valueSyntaxTreeNodeList()->rbegin() = range;
+                    } else {
+                        head->parent->value = range;
+                    }
+
+                    head->parent = range;
+
+                    pair->first = left;
+                    pair->second = right;
+                    range->value = pair;
                     head = range;
+
+                    break;
                 }
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, head};
-                head->child.push_back(node);
+                node->value = new std::vector<std::string>();
+
+                head->value = node;
                 head = node;
                 break;
             }
@@ -203,37 +275,36 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
             }
             case '[': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOr, head};
-                head->child.push_back(node);
-                head = node;
-                node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
-                head->child.push_back(node);
+                head->value = new std::vector<SyntaxTreeNode>();
+
                 head = node;
                 break;
             }
             case '|': {
-                while (head->type != SyntaxTreeNode::nodeOr) {
-                    head = head->parent;
-                }
-                auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOrItem, head};
-                head->child.push_back(node);
-                head = node;
-                break;
+                head = head->parent;
             }
             case ']': {
-                head = head->parent->parent;
-                break;
-            }
-            case '.': {
                 head = head->parent;
                 break;
             }
+            case '.': {
+                head->valueSyntaxStringList()->push_back("");
+            }
+            case ' ': {
+                break;
+            }
             default: {
-                if (head->type != SyntaxTreeNode::nodeV) {
-                    auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeV, head};
-                    head->child.push_back(node);
-                    head = node;
+                if (head->type != SyntaxTreeNode::nodeRaw) {
+                    auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeRaw, head};
+                    if (head->type == SyntaxTreeNode::nodeOr) {
+                        *head->parent->parent->valueSyntaxTreeNodeList()->rbegin() = node;
+                    } else {
+                        head->parent->value = node;
+                    }
+                    head->value = new std::vector<std::string>();
+                    head->valueSyntaxStringList()->push_back("");
                 }
-                head->data += c;
+                head->valueSyntaxStringList()->rbegin()->push_back(c);
             }
         }
     }
