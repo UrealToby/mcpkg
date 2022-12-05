@@ -13,6 +13,15 @@
 class Version {
 public:
     std::vector<std::string> data;
+
+    inline int size() const;
+
+    static Result<> comparison(Version left, Version right, bool greater, bool close);
+    inline bool operator ==(const Version& version) const;
+    bool operator >=(const Version& version) const;
+    bool operator <=(const Version& version) const;
+    bool operator >(const Version& version) const;
+    bool operator <(const Version& version) const;
 };
 
 
@@ -21,8 +30,8 @@ public:
     std::string expression;
     Version base;
     // todo: 将 string 转为 版本表达式
-    VersionExpression* from_string(std::string);
-    virtual Result<> compatible(Version) = 0;
+    static VersionExpression* from_string(const std::string&);
+    virtual Result<> compatible(Version);
 };
 
 class VersionExpressionGreaterOrLess : public VersionExpression{

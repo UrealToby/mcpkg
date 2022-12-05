@@ -6,7 +6,7 @@
 #define MCPKG_RESULT_H
 #include <string>
 
-template <class RETURN_T=std::string>
+template <class RETURN_T=const char*>
 class Result{
 public:
     enum {OK,ERR} state;
@@ -15,6 +15,13 @@ public:
 
     explicit operator bool(){
         return state == OK;
+    }
+    static Result Ok(RETURN_T _data=RETURN_T{}){
+     return Result{OK, _data, 0};
+    }
+
+    static Result Err(int _code,RETURN_T _data=RETURN_T{}){
+        return Result{ERR, _data, _code};
     }
 };
 
