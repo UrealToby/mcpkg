@@ -23,6 +23,8 @@ namespace mcpkg{
     class Dependencies {
     public:
         DependenciesType type;
+
+        /// 给定现有包判断是否会冲突
         virtual CompatibleResult compatible(const std::vector<Package>&) = 0;
         CompatibleResult lastResult;
     };
