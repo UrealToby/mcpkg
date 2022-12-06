@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/classification.hpp>
-#include <iostream>
 
 #include "cmath"
 
@@ -19,10 +18,6 @@
 /// \return
 Result<> Version::comparison(Version left, Version right, bool greater, bool close) {
     int maxLen = std::min(left.size(), right.size());
-    for(auto i :left.data){
-        std::cout<<i<<" ";
-    }
-    std::cout<<std::endl;
 
     for (int i = 0; i < maxLen; ++i) {
         auto a = left.data[i];
@@ -86,10 +81,6 @@ Version::Version(std::string src) {
 
 
 Result<> VersionExpressionGreaterOrLess::compatible(const Version &version) {
-    for(auto i :base.data){
-        std::cout<<i<<" ";
-    }
-    std::cout<<std::endl;
 
     return Version::comparison(version, base, greater, close);
 }
