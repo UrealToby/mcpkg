@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/classification.hpp>
+#include <iostream>
 
 #include "cmath"
 
@@ -18,6 +19,10 @@
 /// \return
 Result<> Version::comparison(Version left, Version right, bool greater, bool close) {
     int maxLen = std::min(left.size(), right.size());
+    for(auto i :left.data){
+        std::cout<<i<<" ";
+    }
+    std::cout<<std::endl;
 
     for (int i = 0; i < maxLen; ++i) {
         auto a = left.data[i];
@@ -81,17 +86,41 @@ Version::Version(std::string src) {
 
 
 Result<> VersionExpressionGreaterOrLess::compatible(const Version &version) {
+    for(auto i :base.data){
+        std::cout<<i<<" ";
+    }
+    std::cout<<std::endl;
+
     return Version::comparison(version, base, greater, close);
 }
+
+// ........................................
+//........................................
+//................8.......................
+//..............,O..................,.....
+//..............8.............,...........
+//......8.......=8....88........8.........
+//......8...........O8+?8.......8.........
+//......8~.........D???8........8 ........
+//.......8.......=8+??+8........Z8........
+//.......8......8+?????+8O......88..,.....
+//......8.......8+???????+8..,..O,........
+//....,,,....=8+?88??????88:..............
+//...........OD???+?8888$???8,............
+//.........88?88?+??????????+8888.........
+//........O+???+888888888888????+O8.......
+//........8+???????+++?+??????????8.......
+//.........8+????????????????????88.......
+//..........,8888O?+++?O888888888.........
+//
 
 class SyntaxTreeNode {
 public:
     enum {
         nodeRoot, nodeOr, nodeMinimum, nodeMaximum, nodeGreater, nodeLess, nodeRange, nodeRaw
     } type;
-    SyntaxTreeNode *parent;
-    void *value;
-    std::string data;
+    SyntaxTreeNode *parent = nullptr;
+    void *value = nullptr;
 
     [[nodiscard]] SyntaxTreeNode *valueSyntaxTreeNode() const {
         return static_cast <SyntaxTreeNode *>(value);
@@ -128,14 +157,16 @@ public:
                 auto rangeTuple = valuePair();
                 delete rangeTuple->first;
                 delete rangeTuple->second;
+                break;
+            }
+            case nodeRaw: {
+                auto childList = valueSyntaxStringList();
+                delete childList;
+                break;
             }
 
             default: {
-                auto childList = static_cast <std::vector<std::string *> *>(value);
-                for (auto child: *childList) {
-                    delete child;
-                }
-                delete childList;
+                delete valueSyntaxTreeNode();
             }
         }
     }
@@ -163,21 +194,27 @@ VersionExpression *ParseTree(SyntaxTreeNode *node) {
         case SyntaxTreeNode::nodeMinimum: {
             auto expression = new VersionExpressionGreaterOrLess();
 
-            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
+                expression->base.data.push_back(i);
+            }
             return expression;
         }
         case SyntaxTreeNode::nodeMaximum: {
             auto expression = new VersionExpressionGreaterOrLess();
             expression->greater = false;
 
-            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
+                expression->base.data.push_back(i);
+            }
             return expression;
         }
         case SyntaxTreeNode::nodeGreater: {
             auto expression = new VersionExpressionGreaterOrLess();
             expression->close = false;
 
-            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
+                expression->base.data.push_back(i);
+            }
             return expression;
         }
         case SyntaxTreeNode::nodeLess: {
@@ -185,13 +222,17 @@ VersionExpression *ParseTree(SyntaxTreeNode *node) {
             expression->greater = false;
             expression->close = false;
 
-            expression->base = ParseTree(node->valueSyntaxTreeNode())->base;
+            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
+                expression->base.data.push_back(i);
+            }
             return expression;
         }
         case SyntaxTreeNode::nodeRaw:
             auto expression = new VersionExpression();
-            expression->base.data = *node->valueSyntaxStringList();
-            break;
+            for (auto i: *node->valueSyntaxStringList()) {
+                expression->base.data.push_back(i);
+            }
+            return expression;
     }
 
     return nullptr;
@@ -207,7 +248,6 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
         switch (c) {
             case '^': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeMinimum, head};
-                node->value = new std::vector<std::string>;
 
                 if (head->type == SyntaxTreeNode::nodeOr) {
                     head->valueSyntaxTreeNodeList()->push_back(node);
@@ -215,46 +255,61 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
                     head->value = node;
                 }
 
+                for (auto child: *head->valueSyntaxTreeNodeList()) {
+                    child;
+                }
+
                 head = node;
+
+                for (auto child: *root.valueSyntaxTreeNode()->valueSyntaxTreeNodeList()) {
+                    child;
+                }
+
                 break;
             }
             case '>': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeGreater, head};
-                node->value = new std::vector<std::string>;
 
                 if (head->type == SyntaxTreeNode::nodeOr) {
                     head->valueSyntaxTreeNodeList()->push_back(node);
                 } else {
                     head->value = node;
                 }
+
                 head = node;
                 break;
             }
             case '<': {
-                if (head->type != SyntaxTreeNode::nodeRoot and (head->parent->type == SyntaxTreeNode::nodeGreater or
-                                                                head->parent->type == SyntaxTreeNode::nodeMinimum)) {
+                if (head->parent->type == SyntaxTreeNode::nodeGreater or
+                    head->parent->type == SyntaxTreeNode::nodeMinimum) {
                     // 为范围表达式
-                    auto left = head->parent->parent->valueSyntaxTreeNode();
 
-                    auto right = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, head};
-                    right->value = new std::vector<std::string>();
+                    auto range = new SyntaxTreeNode{SyntaxTreeNode::nodeRange, head->parent->parent};
+
+                    SyntaxTreeNode* left;
+                    if (head->parent->parent->type == SyntaxTreeNode::nodeOr){
+                        left = *head->parent->parent->valueSyntaxTreeNodeList()->rbegin();
+                    }
+                    else{
+                        left = head->parent->parent->valueSyntaxTreeNode();
+                    }
+
+                    left->parent = range;
+                    auto right = new SyntaxTreeNode{SyntaxTreeNode::nodeLess, range};
 
                     auto pair = new std::pair<SyntaxTreeNode *, SyntaxTreeNode *>;
+                    pair->first = left;
+                    pair->second = right;
 
                     // 将节点转为 range 类型
-                    auto range = new SyntaxTreeNode{SyntaxTreeNode::nodeRange, head->parent->parent};
-                    if (head->type == SyntaxTreeNode::nodeOr) {
-                        *head->parent->parent->valueSyntaxTreeNodeList()->rbegin() = range;
+                    if (range->parent->type == SyntaxTreeNode::nodeOr) {
+                        *range->parent->valueSyntaxTreeNodeList()->rbegin() = range;
                     } else {
                         head->parent->value = range;
                     }
 
-                    head->parent = range;
-
-                    pair->first = left;
-                    pair->second = right;
                     range->value = pair;
-                    head = range;
+                    head = right;
 
                     break;
                 }
@@ -275,20 +330,26 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
             }
             case '[': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeOr, head};
-                head->value = new std::vector<SyntaxTreeNode>();
+                node->value = new std::vector<SyntaxTreeNode>();
+
+                head->value = node;
 
                 head = node;
                 break;
             }
             case '|': {
-                head = head->parent;
+                while (head->type!=SyntaxTreeNode::nodeOr){
+                    head = head->parent;
+                }
+                break;
             }
             case ']': {
-                head = head->parent;
+                head = head->parent->parent;
                 break;
             }
             case '.': {
                 head->valueSyntaxStringList()->push_back("");
+                break;
             }
             case ' ': {
                 break;
@@ -297,24 +358,27 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
                 if (head->type != SyntaxTreeNode::nodeRaw) {
                     auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeRaw, head};
                     if (head->type == SyntaxTreeNode::nodeOr) {
-                        *head->parent->parent->valueSyntaxTreeNodeList()->rbegin() = node;
+                        head->valueSyntaxTreeNodeList()->push_back(node);
                     } else {
-                        head->parent->value = node;
+                        head->value = node;
                     }
-                    head->value = new std::vector<std::string>();
-                    head->valueSyntaxStringList()->push_back("");
+                    node->value = new std::vector<std::string>();
+                    node->valueSyntaxStringList()->push_back("");
+                    head = node;
                 }
                 head->valueSyntaxStringList()->rbegin()->push_back(c);
+
             }
         }
     }
 
+
     return ParseTree(&root);
+//    return nullptr;
 }
 
 
 Result<> VersionExpression::compatible(const Version &version) {
-
     if (base == version) {
         return Result<>::Ok();
     }

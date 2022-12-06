@@ -12,7 +12,7 @@
 
 class Version {
 public:
-    std::vector<std::string> data;
+    std::vector<std::string> data{};
 
     [[nodiscard]] inline int size() const;
     Version()= default;
