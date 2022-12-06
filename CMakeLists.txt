@@ -3,7 +3,7 @@ project (mcpkg)
 
 #add_compile_options("-pg")
 
-#SET(CMAKE_CXX_FLAGS_DEBUG -pg)
+SET(CMAKE_CXX_FLAGS_DEBUG -pg)
 
 find_package(Boost COMPONENTS regex system REQUIRED)
 
