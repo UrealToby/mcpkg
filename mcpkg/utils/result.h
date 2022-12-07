@@ -13,14 +13,14 @@ public:
     RETURN_T data{};
     int errCode = 0;
 
-    explicit operator bool(){
+    inline explicit operator bool(){
         return state == OK;
     }
-    static Result Ok(RETURN_T _data=RETURN_T{}){
+    inline static Result Ok(RETURN_T _data=RETURN_T{}){
      return Result{OK, _data, 0};
     }
 
-    static Result Err(int _code,RETURN_T _data=RETURN_T{}){
+    inline static Result Err(int _code,RETURN_T _data=RETURN_T{}){
         return Result{ERR, _data, _code};
     }
 };

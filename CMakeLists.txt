@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project (mcpkg)
 
-#add_compile_options("-pg")
-
 SET(CMAKE_CXX_FLAGS_DEBUG -pg)
 
 find_package(Boost COMPONENTS regex system REQUIRED)

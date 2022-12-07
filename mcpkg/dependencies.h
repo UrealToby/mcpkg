@@ -47,7 +47,7 @@ namespace mcpkg{
         ///     最小版本: \c "^1.15"
         ///     或: \c "1.5|1.19"
         ///
-        VersionExpression* version;
+        Comparable* version;
         CompatibleResult compatible(const std::vector<Package>&) override;
     };
 
