@@ -40,7 +40,7 @@ namespace mcpkg{
     public:
         struct FileInfo{
             std::string name;
-            std::string downloadPath;
+            std::string filePath;
             std::string md5;
             size_t size;
         } fileInfo;
@@ -54,15 +54,9 @@ namespace mcpkg{
             std::string author_site;
             std::string site;
         };
-        std::string name;
-        std::string localName;
-        std::string id;
-        std::string describe;
         std::vector<Dependencies*> dependencies;
 
         std::vector<std::string > tags;
-
-        Version version;
 
         Result<Dependencies*> checkDependencies(const std::vector<Package>&);
 
@@ -72,13 +66,8 @@ namespace mcpkg{
     /// 不存储文件，只存储配置
 
     class StaticPackage : public Package{
-        // 是否解压
-        enum {
-            noExtract,
-            Extract,
-            ExtractToNewFolder,
-        }extract = noExtract;
-        Path path;
+        bool extract = false;
+        Path pathTo;
     };
 
     /// 需要执行的文件，比如ModLoader,Optifine
