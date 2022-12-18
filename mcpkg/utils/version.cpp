@@ -5,18 +5,8 @@
 #include "version.h"
 
 #include <stdexcept>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
 
-#include "cmath"
-
-/// 比较两个版本
-/// \param left
-/// \param right
-/// \param greater \c true 为大于，\c false 为小于
-/// \param close
-/// \return
-Result<> Version::comparison(Version left, Version right, bool greater, bool close) {
+Result<> mcpkg::Version::comparison(Version left, Version right, bool greater, bool close) {
     int maxLen = std::min(left.size(), right.size());
 
     for (int i = 0; i < maxLen; ++i) {
@@ -51,39 +41,39 @@ Result<> Version::comparison(Version left, Version right, bool greater, bool clo
     return Result<>::Err(1, "unsatisfactory relationship");
 }
 
-bool Version::operator==(const Version &version) const {
+bool mcpkg::Version::operator==(const Version &version) const {
     return version.data == data;
 }
 
-bool Version::operator>=(const Version &version) const {
+bool mcpkg::Version::operator>=(const Version &version) const {
     return (bool) comparison(*this, version, true, true);
 }
 
-bool Version::operator<=(const Version &version) const {
+bool mcpkg::Version::operator<=(const Version &version) const {
     return (bool) comparison(*this, version, false, true);
 }
 
-bool Version::operator>(const Version &version) const {
+bool mcpkg::Version::operator>(const Version &version) const {
     return (bool) comparison(*this, version, true, false);
 }
 
-bool Version::operator<(const Version &version) const {
+bool mcpkg::Version::operator<(const Version &version) const {
     return (bool) comparison(*this, version, false, false);
 }
 
-int Version::size() const {
+int mcpkg::Version::size() const {
     return (int) data.size();
 }
 
-Version::Version(std::string src) {
-    boost::split(data, src, boost::is_any_of("."), boost::token_compress_on);
+mcpkg::Version::Version(const std::string& src) {
+    for (char i: src) {
+        if (i == '.') {
+            data.emplace_back();
+            continue;
+        }
+    }
 }
 
-
-Result<> VersionExpressionGreaterOrLess::compatible(const Version &version) {
-
-    return Version::comparison(version, base, greater, close);
-}
 
 // ........................................
 //........................................
@@ -107,7 +97,7 @@ Result<> VersionExpressionGreaterOrLess::compatible(const Version &version) {
 
 class SyntaxTreeNode {
 public:
-    enum {
+    enum Type {
         nodeRoot, nodeOr, nodeMinimum, nodeMaximum, nodeGreater, nodeLess, nodeRange, nodeRaw
     } type;
     SyntaxTreeNode *parent = nullptr;
@@ -127,6 +117,43 @@ public:
 
     [[nodiscard]] std::pair<SyntaxTreeNode *, SyntaxTreeNode *> *valuePair() const {
         return static_cast <std::pair<SyntaxTreeNode *, SyntaxTreeNode *> *>(value);
+    }
+
+    SyntaxTreeNode(Type type, SyntaxTreeNode *parent) {
+        this->type = type;
+        this->parent = parent;
+    }
+
+    SyntaxTreeNode(const SyntaxTreeNode &copySource) // Copy constructor
+    {
+        switch (copySource.type) {
+            case nodeOr: {
+                this->value = new std::vector<SyntaxTreeNode *>(*copySource.valueSyntaxTreeNodeList());
+
+                for (auto node: *this->valueSyntaxTreeNodeList()) {
+                    node->parent = this;
+                }
+                break;
+            }
+            case nodeRange: {
+
+                this->value = new std::pair<SyntaxTreeNode *, SyntaxTreeNode *>(
+                        new SyntaxTreeNode(*copySource.valuePair()->first),
+                        new SyntaxTreeNode(*copySource.valuePair()->second));
+                this->valuePair()->first->parent = this;
+                this->valuePair()->second->parent = this;
+                break;
+            }
+            case nodeRaw: {
+                this->value = new std::vector<std::string>(*copySource.valueSyntaxStringList());
+                break;
+            }
+
+            default: {
+                this->value = new SyntaxTreeNode(*copySource.valueSyntaxTreeNode());
+                this->valueSyntaxTreeNode()->parent = this;
+            }
+        }
     }
 
     ~SyntaxTreeNode() {
@@ -163,64 +190,66 @@ public:
     }
 };
 
-VersionExpression *ParseTree(SyntaxTreeNode *node) {
+/**
+ * 将语法树构建为版本表达式
+ * @param node
+ * @return
+ */
+mcpkg::Comparable *parse_syntax_tree(SyntaxTreeNode *node) {
 //    VersionExpression* expression;
     switch (node->type) {
         case SyntaxTreeNode::nodeRoot:
-            return ParseTree(node->valueSyntaxTreeNode());
+            return parse_syntax_tree(node->valueSyntaxTreeNode());
         case SyntaxTreeNode::nodeRange: {
-            auto expression = new VersionExpressionRange();
-            expression->left = dynamic_cast<VersionExpressionGreaterOrLess *>(ParseTree(node->valuePair()->first));
-            expression->right = dynamic_cast<VersionExpressionGreaterOrLess *>(ParseTree(node->valuePair()->second));
+            auto expression = new mcpkg::VersionCompareRange();
+            expression->left = *dynamic_cast<mcpkg::VersionCompareGreaterOrLess *>(parse_syntax_tree(
+                    node->valuePair()->first));
+            expression->right = *dynamic_cast<mcpkg::VersionCompareGreaterOrLess *>(parse_syntax_tree(
+                    node->valuePair()->second));
 
             return expression;
         }
         case SyntaxTreeNode::nodeOr: {
-            auto expression = new VersionExpressionOr();
+            auto expression = new mcpkg::VersionCompareOr();
             for (auto child: *node->valueSyntaxTreeNodeList()) {
-                expression->expressions.push_back(ParseTree(child));
+                expression->expressions.push_back(parse_syntax_tree(child));
             }
             return expression;
         }
         case SyntaxTreeNode::nodeMinimum: {
-            auto expression = new VersionExpressionGreaterOrLess();
-
-            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
-                expression->base.data.push_back(i);
-            }
+            auto expression = new mcpkg::VersionCompareGreaterOrLess();
+            expression->base.data = dynamic_cast<mcpkg::VersionCompareEqual *>(parse_syntax_tree(
+                    node->valueSyntaxTreeNode()))->base.data;
             return expression;
         }
         case SyntaxTreeNode::nodeMaximum: {
-            auto expression = new VersionExpressionGreaterOrLess();
+            auto expression = new mcpkg::VersionCompareGreaterOrLess();
             expression->greater = false;
+            expression->base.data = dynamic_cast<mcpkg::VersionCompareEqual *>(parse_syntax_tree(
+                    node->valueSyntaxTreeNode()))->base.data;
 
-            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
-                expression->base.data.push_back(i);
-            }
             return expression;
         }
         case SyntaxTreeNode::nodeGreater: {
-            auto expression = new VersionExpressionGreaterOrLess();
+            auto expression = new mcpkg::VersionCompareGreaterOrLess();
             expression->close = false;
+            expression->base.data = dynamic_cast<mcpkg::VersionCompareEqual *>(parse_syntax_tree(
+                    node->valueSyntaxTreeNode()))->base.data;
 
-            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
-                expression->base.data.push_back(i);
-            }
             return expression;
         }
         case SyntaxTreeNode::nodeLess: {
-            auto expression = new VersionExpressionGreaterOrLess();
+            auto expression = new mcpkg::VersionCompareGreaterOrLess();
             expression->greater = false;
             expression->close = false;
 
-            for (auto i: ParseTree(node->valueSyntaxTreeNode())->base.data) {
-                expression->base.data.push_back(i);
-            }
+            expression->base.data = dynamic_cast<mcpkg::VersionCompareEqual *>(parse_syntax_tree(
+                    node->valueSyntaxTreeNode()))->base.data;
             return expression;
         }
         case SyntaxTreeNode::nodeRaw:
-            auto expression = new VersionExpression();
-            for (auto i: *node->valueSyntaxStringList()) {
+            auto expression = new mcpkg::VersionCompareEqual();
+            for (const auto& i: *node->valueSyntaxStringList()) {
                 expression->base.data.push_back(i);
             }
             return expression;
@@ -229,13 +258,12 @@ VersionExpression *ParseTree(SyntaxTreeNode *node) {
     return nullptr;
 }
 
-
-VersionExpression *VersionExpression::from_string(const std::string &str) {
+SyntaxTreeNode build_syntax_tree(const std::string &src) {
     SyntaxTreeNode root = SyntaxTreeNode{SyntaxTreeNode::nodeRoot, nullptr};
     SyntaxTreeNode *head = &root;
 
     /// 构建语法树
-    for (auto c: str) {
+    for (auto c: src) {
         switch (c) {
             case '^': {
                 auto node = new SyntaxTreeNode{SyntaxTreeNode::nodeMinimum, head};
@@ -245,16 +273,7 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
                 } else {
                     head->value = node;
                 }
-
-                for (auto child: *head->valueSyntaxTreeNodeList()) {
-                    child;
-                }
-
                 head = node;
-
-                for (auto child: *root.valueSyntaxTreeNode()->valueSyntaxTreeNodeList()) {
-                    child;
-                }
 
                 break;
             }
@@ -277,11 +296,10 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
 
                     auto range = new SyntaxTreeNode{SyntaxTreeNode::nodeRange, head->parent->parent};
 
-                    SyntaxTreeNode* left;
-                    if (head->parent->parent->type == SyntaxTreeNode::nodeOr){
+                    SyntaxTreeNode *left;
+                    if (head->parent->parent->type == SyntaxTreeNode::nodeOr) {
                         left = *head->parent->parent->valueSyntaxTreeNodeList()->rbegin();
-                    }
-                    else{
+                    } else {
                         left = head->parent->parent->valueSyntaxTreeNode();
                     }
 
@@ -329,7 +347,7 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
                 break;
             }
             case '|': {
-                while (head->type!=SyntaxTreeNode::nodeOr){
+                while (head->type != SyntaxTreeNode::nodeOr) {
                     head = head->parent;
                 }
                 break;
@@ -363,13 +381,19 @@ VersionExpression *VersionExpression::from_string(const std::string &str) {
         }
     }
 
+    return root;
+}
 
-    return ParseTree(&root);
+mcpkg::Comparable *mcpkg::from_string(const std::string &str) {
+    SyntaxTreeNode root = build_syntax_tree(str);
+    Comparable *expression = parse_syntax_tree(&root);
+
+    return expression;
 //    return nullptr;
 }
 
+Result<> mcpkg::VersionCompareEqual::compatible(const mcpkg::Version &version) {
 
-Result<> VersionExpression::compatible(const Version &version) {
     if (base == version) {
         return Result<>::Ok();
     }
@@ -388,29 +412,47 @@ Result<> VersionExpression::compatible(const Version &version) {
     return Result<>::Ok();
 }
 
-Result<> VersionExpressionRange::compatible(const Version &version) {
-    auto lResult = left->compatible(version);
-    auto rResult = right->compatible(version);
 
-    return lResult and rResult ? Result<>::Ok() : Result<>::Err(1, "version is not in the specified range");
+Result<> mcpkg::VersionCompareGreaterOrLess::compatible(const Version &version) {
+    auto result = Version::comparison(version, base, greater, close);
+    if (result){
+        return Result<>::Ok();
+    } else{
+        return Result<>::Err(2,"version does not conform to size relationship");
+    }
+    return Version::comparison(version, base, greater, close);
 }
 
-VersionExpressionRange::~VersionExpressionRange() {
-    delete left;
-    delete right;
+Result<> mcpkg::VersionCompareRange::compatible(const Version &version) {
+    auto lResult = left.compatible(version);
+    auto rResult = right.compatible(version);
+
+    return lResult and rResult ? Result<>::Ok() : Result<>::Err(3, "version is not in the specified range");
 }
 
-Result<> VersionExpressionOr::compatible(const Version &version) {
+Result<> mcpkg::VersionCompareOr::compatible(const Version &version) {
     for (auto expr: expressions) {
         if (expr->compatible(version)) {
             return Result<>::Ok();
         }
     }
-    return Result<>::Err(1, "the version cannot meet any conditions");
+    return Result<>::Err(4, "the version cannot meet any conditions");
 }
 
-VersionExpressionOr::~VersionExpressionOr() {
+mcpkg::VersionCompareOr::~VersionCompareOr() {
     for (auto a: expressions) {
         delete a;
     }
+}
+
+mcpkg::VersionExpression::VersionExpression(const std::string &src) {
+    this->comparable = from_string(src);
+}
+
+Result<> mcpkg::VersionExpression::compatible(const mcpkg::Version &version) {
+    return comparable->compatible(version);
+}
+
+mcpkg::VersionExpression::~VersionExpression() {
+    delete this->comparable;
 }

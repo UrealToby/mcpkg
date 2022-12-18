@@ -14,17 +14,22 @@ namespace mcpkg{
     class Package;
 
     enum DependenciesType{
-        kConflict,
-        kDepend
+        Conflict,
+        Depend
     };
 
+    enum DependenciesLevel{
+        Force,
+        Option,
+        Probably
+    };
     using CompatibleResult = Result<Package*>;
 
     class Dependencies {
     public:
         DependenciesType type;
+        std::string description;
 
-        /// 给定现有包判断是否会冲突
         virtual CompatibleResult compatible(const std::vector<Package>&) = 0;
         CompatibleResult lastResult;
     };
@@ -47,16 +52,16 @@ namespace mcpkg{
         ///     最小版本: \c "^1.15"
         ///     或: \c "1.5|1.19"
         ///
-        VersionExpression* version;
+        Comparable* version;
         CompatibleResult compatible(const std::vector<Package>&) override;
     };
 
-    class TagConflictDependencies : public Dependencies{
-    public:
-        std::string tag;
-
-        CompatibleResult compatible(const std::vector<Package>&) override;
-    };
+//    class TagConflictDependencies : public Dependencies{
+//    public:
+//        std::string tag;
+//
+//        CompatibleResult compatible(const std::vector<Package>&) override;
+//    };
 
 }
 
