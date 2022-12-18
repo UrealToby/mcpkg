@@ -14,17 +14,22 @@ namespace mcpkg{
     class Package;
 
     enum DependenciesType{
-        kConflict,
-        kDepend
+        Conflict,
+        Depend
     };
 
+    enum DependenciesLevel{
+        Force,
+        Option,
+        Probably
+    };
     using CompatibleResult = Result<Package*>;
 
     class Dependencies {
     public:
         DependenciesType type;
+        std::string description;
 
-        /// 给定现有包判断是否会冲突
         virtual CompatibleResult compatible(const std::vector<Package>&) = 0;
         CompatibleResult lastResult;
     };
