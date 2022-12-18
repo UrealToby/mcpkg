@@ -56,12 +56,12 @@ namespace mcpkg{
         CompatibleResult compatible(const std::vector<Package>&) override;
     };
 
-    class TagConflictDependencies : public Dependencies{
-    public:
-        std::string tag;
-
-        CompatibleResult compatible(const std::vector<Package>&) override;
-    };
+//    class TagConflictDependencies : public Dependencies{
+//    public:
+//        std::string tag;
+//
+//        CompatibleResult compatible(const std::vector<Package>&) override;
+//    };
 
 }
 

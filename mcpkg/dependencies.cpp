@@ -38,14 +38,14 @@ mcpkg::CompatibleResult mcpkg::PackageDependencies::compatible(const std::vector
     return lastResult;
 }
 
-mcpkg::CompatibleResult mcpkg::TagConflictDependencies::compatible(const std::vector<Package> &packages) {
-    for (auto package: packages) {
-            if(std::find(package.tags.begin(), package.tags.end(), tag) != package.tags.end()){
-                // 存在冲突的标签
-                lastResult = mcpkg::CompatibleResult{mcpkg::CompatibleResult::ERR,&package, 1};
-                return lastResult;
-            }
-    }
-    lastResult = mcpkg::CompatibleResult{mcpkg::CompatibleResult::OK};
-    return lastResult;
-}
+//mcpkg::CompatibleResult mcpkg::TagConflictDependencies::compatible(const std::vector<Package> &packages) {
+//    for (auto package: packages) {
+//            if(std::find(package.tags.begin(), package.tags.end(), tag) != package.tags.end()){
+//                // 存在冲突的标签
+//                lastResult = mcpkg::CompatibleResult{mcpkg::CompatibleResult::ERR,&package, 1};
+//                return lastResult;
+//            }
+//    }
+//    lastResult = mcpkg::CompatibleResult{mcpkg::CompatibleResult::OK};
+//    return lastResult;
+//}
